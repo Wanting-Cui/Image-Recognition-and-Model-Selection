@@ -1,0 +1,279 @@
+---
+title: "XGBOOST with Different Feature Extraction"
+output: html_notebook
+---
+
+```{r}
+library(xgboost)
+library(ggplot2)
+library(reshape2)
+
+source("../lib/xgboost_cv.R")
+```
+
+
+```{r}
+ind <- c(data.matrix(read.table("../data/train/TEST-NUMBER.txt")))
+
+lab <- read.csv("../output/features/label_train.csv")
+lab_tr <- data.matrix(lab[-ind, 3])
+# lab_tr[which(lab_tr == 3)] = 0
+```
+
+
+# GIST
+```{r}
+dat1 <- read.csv("../output/gist/gist10.csv")
+train1 <- dat1[-ind, ]
+gist_tr <- xgboost_cv(train = train1, lab = lab_tr, nrou = 100, 
+                      list_max.depth = c(3, 5, 10, 20), list_eta = c(0.03, 0.3, 0.8), name = "GIST")
+```
+
+# SIFT
+```{r}
+dat2 <- read.csv("../data/train/SIFT_train.csv", header = FALSE)[, -1]
+train2 <- data.matrix(dat2[-ind, -1])
+sift_tr <- xgboost_cv(train = train2, lab = lab_tr, nrou = 300, 
+                      list_max.depth = c(3, 5, 10, 20), 
+                      list_eta = c(0.03, 0.3, 0.5),
+                      name = "SIFT")
+```
+
+# HOG
+```{r}
+load("../output/features/HOG.RData")
+dat3 <- dat
+
+train3 <- data.matrix(dat3[-ind, ])
+hog_tr <- xgboost_cv(train = train3, lab = lab_tr, nrou = 300, 
+                      list_max.depth = c(3, 5, 10, 20), list_eta = c(0.03, 0.3, 0.8), name = "HOG")
+hog_tr[[2]]
+```
+
+#SIFT + HOG
+```{r}
+dat6 <- cbind(dat2, dat3)[, -1]
+train6 <- data.matrix(dat6[-ind, ])
+sh_tr <- xgboost_cv(train = train6, lab = lab_tr, nrou = 250, 
+                      list_max.depth = c(3, 5, 10), 
+                      list_eta = c(0.03, 0.3, 0.5),
+                      name = "SIFT + HOG")
+mat1 <- sh_tr[[1]]
+```
+
+
+# LBP
+```{r}
+dat4 <- read.csv("../output/lbp/lbp.csv", header = FALSE)
+train4 <- data.matrix(dat4[-ind, ])
+lbp_tr <- xgboost_cv(train = train4, lab = lab_tr, nrou = 100, 
+                      list_max.depth = c(3, 5, 10, 20), list_eta = c(0.03, 0.3, 0.8), name = "LBP")
+lbp_tr[[2]]
+```
+
+# Using SIFT
+```{r}
+lab_te <- data.matrix(lab[ind, 3])
+test <- data.matrix(dat2[ind, -1])
+
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.3, "max.depth" = 3)
+system.time(bst <- xgboost(data = train2, label = lab_tr, params = param, nrounds = 200, verbose = 0))
+pred <- predict(bst, test)
+sum(pred != lab_te)/300
+
+```
+
+
+# Test SIFT + HOG
+```{r}
+lab_te <- data.matrix(lab[ind, 3])
+test <- data.matrix(dat6[ind, ])
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.5, "max.depth" = 3)
+system.time(bst <- xgboost(data = train6, label = lab_tr, params = param, nrounds = 200, verbose = 0))
+pred <- predict(bst, test)
+mean(pred != lab_te)
+```
+
+# HOG
+```{r}
+test <- data.matrix(dat3[ind, ])
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.5, "max.depth" = 5)
+system.time(bst <- xgboost(data = train3, label = lab_tr, params = param, nrounds = 200, verbose = 0))
+pred <- predict(bst, test)
+mean(pred != lab_te)
+```
+
+# GIST + HOG
+```{r}
+dat7 <- cbind(dat3, dat1)
+train7 <- data.matrix(dat7[-ind, ])
+
+test <- data.matrix(dat7[ind, ])
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 3,
+                    "eta" = 0.5, "max.depth" = 4)
+system.time(bst <- xgboost(data = train7, label = lab_tr, params = param, nrounds = 200, verbose = 0))
+pred <- predict(bst, test)
+mean(pred != lab_te)
+```
+
+# GIST + HOG + LBP
+```{r}
+lab_te <- data.matrix(lab[ind, 3])
+lab_tr <- data.matrix(lab[-ind, 3])
+
+dat8 <- cbind(dat7, dat4)
+train8 <- data.matrix(dat8[-ind, ])
+
+test <- data.matrix(dat8[ind, ])
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.5, "max.depth" = 4)
+system.time(bst <- xgboost(data = train8, label = lab_tr, params = param, nrounds = 200, verbose = 0))
+pred <- predict(bst, test)
+mean(pred != lab_te)
+```
+
+# SIFT + GIST
+```{r}
+lab_te <- data.matrix(lab[ind, 3])
+lab_tr <- data.matrix(lab[-ind, 3])
+
+dat9 <- cbind(dat2, dat1)
+train9 <- data.matrix(dat9[-ind, ])
+
+test <- data.matrix(dat9[ind, ])
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.5, "max.depth" = 4)
+system.time(bst <- xgboost(data = train9, label = lab_tr, params = param, nrounds = 200, verbose = 0))
+pred <- predict(bst, test)
+mean(pred != lab_te)
+```
+
+# SIFT + HOG + GIST
+```{r}
+dat10 <- cbind(dat2, dat1, dat3)
+train10 <- data.matrix(dat10[-ind, ])
+
+test <- data.matrix(dat10[ind, ])
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.5, "max.depth" = 4)
+system.time(bst <- xgboost(data = train10, label = lab_tr, params = param, nrounds = 200, verbose = 0))
+pred <- predict(bst, test)
+mean(pred != lab_te)
+```
+
+# SIFT + HOG + GIST + lbp
+```{r}
+dat11 <- cbind(dat2, dat1, dat3, dat4)
+train11 <- data.matrix(dat11[-ind, ])
+
+test <- data.matrix(dat11[ind, ])
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.5, "max.depth" = 4)
+system.time(bst <- xgboost(data = train11, label = lab_tr, params = param, nrounds = 200, verbose = 0))
+pred <- predict(bst, test)
+mean(pred != lab_te)
+```
+
+# SIFT + HOG + lbp
+```{r}
+dat11 <- cbind(dat2, dat3, dat4)
+train11 <- data.matrix(dat11[-ind, ])
+
+test <- data.matrix(dat11[ind, ])
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.5, "max.depth" = 4)
+system.time(bst <- xgboost(data = train11, label = lab_tr, params = param, nrounds = 200, verbose = 0))
+pred <- predict(bst, test)
+mean(pred != lab_te)
+
+lab_te <- read.csv()
+```
+
+# SIFT + HOG + lbp cv
+```{r}
+dat11 <- cbind(dat2, dat3, dat4)
+train11 <- data.matrix(dat11[-ind, ])
+
+shl_tr <- xgboost_cv(train = train11, lab = lab_tr, nrou = 300, 
+                      list_max.depth = c(3, 5, 10), 
+                      list_eta = c(0.3, 0.5, 0.8),
+                      name = "SIFT + HOG + lbp")
+dat <- shl_tr[[1]]
+```
+
+# GIST6 + HOG
+```{r}
+gist6 <- read.csv("../output/gist/gist6.csv")
+dat11 <- cbind(dat3, gist6)
+train11 <- data.matrix(dat11[-ind, ])
+
+test <- data.matrix(dat11[ind, ])
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.5, "max.depth" = 4)
+system.time(bst <- xgboost(data = train11, label = lab_tr, params = param, nrounds = 200, verbose = 0))
+pred <- predict(bst, test)
+mean(pred != lab_te)
+```
+
+# GIST6 + HOG + lbp
+```{r}
+gist6 <- read.csv("../output/gist/gist6.csv")
+dat11 <- cbind(dat3, dat4, gist6)
+train11 <- data.matrix(dat11[-ind, ])
+
+test <- data.matrix(dat11[ind, ])
+
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.5, "max.depth" = 2)
+system.time(bst <- xgboost(data = train11, label = lab_tr, params = param, nrounds = 130, verbose = 0))
+pred <- predict(bst, test)
+mean(pred != lab_te)
+```
+
+# GIST6 + HOG + lbp
+```{r}
+dat11 <- cbind(dat3, dat4, gist6)
+train11 <- data.matrix(dat11[-ind, ])
+
+ghl_tr <- xgboost_cv(train = train11, lab = lab_tr, nrou = 300, 
+                      list_max.depth = c(3, 5, 10), 
+                      list_eta = c(0.3, 0.5, 0.8),
+                      name = "GIST + HOG + lbp")
+
+```
+
+# SIFT + HOG +lbp
+```{r}
+dat11 <- cbind(dat2, dat3, dat4)
+train11 <- data.matrix(dat11[-ind, ])
+
+ghl_tr2 <- xgboost_cv(train = train11, lab = lab_tr, nrou = 200, 
+                      list_max.depth = c(2, 3, 4), 
+                      list_eta = c(0.4, 0.5),
+                      name = "SIST + HOG + lbp 2")
+```
+

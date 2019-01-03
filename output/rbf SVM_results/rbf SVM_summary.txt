@@ -1,0 +1,7 @@
+RBF SVM Model Results
+
+     Processing time(s) Training Accuracy Test Accuracy
+SIFT           45.14         0.9944444     0.7633333
+GIST           16.42         0.9251852     0.7600000
+HOG             2.96         0.7877778     0.7266667
+LBP             1.86         0.7955556     0.7466667

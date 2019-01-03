@@ -1,0 +1,266 @@
+---
+title: "logistic"
+output: html_document
+---
+```{r}
+#install sgd package from github
+
+# if (packageVersion("devtools") < 1.6) {
+#   install.packages("devtools")
+# }
+# devtools::install_github("airoldilab/sgd")
+```
+
+#cross validation function(here because we use cv.glmnet so we don't use this loop any more)
+```{r}
+# cv.function <- function(data,label,K = 9){
+#   library(caret)
+#   
+#   fold <- createFolds(1:dim(data)[1], K, list=T, returnTrain=F)
+#   fold <- as.data.frame(fold)
+#   
+#   cv.error <- rep(NA, K)
+#   
+#   for (i in 1:K){
+#     test.data <- data[fold[,i],]
+#     train.data <- data[-fold[,i],]
+#     test.label <- label[fold[,i],]
+#     train.label <- label[-fold[,i],]
+#     
+#     fit <- sgd(train.data,train.label,
+#                model='glm',model.control=binomial(link="logit"))
+#     pred <- predict(fit, test.data,type = 'response')  
+#     pred <- ifelse(pred <= 0.5, 0, 1) 
+#     cv.error[i] <- mean(pred != test.label)
+#   }
+#   return(mean(cv.error))
+# }
+```
+
+```{r}
+library(glmnet)
+```
+
+#(1)
+#gist feature
+```{r}
+index <- read.table("../data/TEST-NUMBER.txt")
+index <- as.vector(t(index))
+
+gist <- read.csv('./gist/gist10.csv')
+label <- read.csv('../data/train/label_train.csv')[,3]
+label <- as.data.frame(label)
+
+gist_train <- gist[-index,]
+gist_test <- gist[index,]
+train_label <- matrix(label[-index,])
+test_label <- matrix(label[index,])
+```
+#cross validation
+```{r,warning=FALSE}
+gist_fit <- cv.glmnet(as.matrix(gist_train), train_label,nfolds = 3,family = "multinomial")
+plot(gist_fit,main = "logistic-gist")
+```
+
+```{r}
+#best lambda is l
+l <- gist_fit$lambda.1se
+#model with best lamda cost time 
+time <- system.time(glmnet(as.matrix(gist_train), as.factor(train_label),lambda = l,
+                   family = "multinomial",type.multinomial = "grouped"))[3]
+time
+#error rate
+pred <- predict.cv.glmnet(gist_fit, as.matrix(gist_test),type = "class")
+pred <- data.frame(pred)
+
+error <- mean(pred != test_label)
+error
+```
+
+-----------
+```{r}
+# library(glmnet)
+# 
+# 
+# #grid =10^ seq (10,-2, length =100)
+# fit <- cv.glmnet(as.matrix(gist_train), train_label,nfolds = 3,family = "multinomial")
+# #plot(fit)
+# pred1 <- predict.cv.glmnet(fit, as.matrix(gist_test),s = 'lambda.min')
+# pred2 <- predict.cv.glmnet(fit, as.matrix(gist_test))
+# mean(round(pred1) != test_label)
+# mean(round(pred2) != test_label)
+# 
+# 
+# 
+# fit <- glmnet(as.matrix(gist_train), as.factor(train_label), 
+#               family="multinomial", lambda=0, type.multinomial = "grouped")
+# pred <- predict(fit, as.matrix(gist_test),type = 'link')
+# pred <- data.frame(pred)
+# 
+# pred.label <- apply(pred,1,which.max)
+# error <- mean(pred.label != test_label)
+# error
+```
+
+
+
+
+
+
+
+
+
+#(2)
+#lbp feature
+```{r}
+# index <- read.table("TEST-NUMBER.txt")
+# index <- as.vector(t(index))
+
+LBP <- read.csv('./lbp/lbp.csv',
+                header = FALSE)
+# label <- read.csv('C:/Users/ding/Desktop/train/train/label_train.csv')[,3]
+# label <- as.data.frame(label)
+
+LBP_train <- LBP[-index,]
+LBP_test <- LBP[index,]
+train_label <- matrix(label[-index,])
+test_label <- matrix(label[index,])
+```
+
+#one way to do logistic(*)
+#this is correct, i just don't use it so i comment it
+```{r}
+# train <- cbind(LBP_train,train_label)
+# colnames(train)[27] <- "label"
+# 
+# #logistic modle
+# library(nnet)
+# logis_fit <- multinom(label~., data = train)
+# pred <- predict(logis_fit, LBP_test,type = 'probs')
+# pred <- data.frame(pred)
+# 
+# pred.label <- apply(pred,1,which.max)
+# error <- mean(pred.label != test_label)
+# error
+```
+
+#another way to do logistic
+#cross validation
+```{r}
+lbp_fit <- cv.glmnet(as.matrix(LBP_train), train_label,nfolds = 3,family = "multinomial")
+plot(lbp_fit,main = "logistic-lbp")
+```
+
+```{r}
+#best lambda is l
+l <- lbp_fit$lambda.1se
+#model with best lamda cost time 
+time <- system.time(glmnet(as.matrix(LBP_train), as.factor(train_label),lambda = l,
+                   family = "multinomial",type.multinomial = "grouped"))[3]
+time
+#error rate
+pred <- predict.cv.glmnet(lbp_fit, as.matrix(LBP_test),type = "class")
+pred <- data.frame(pred)
+
+error <- mean(pred != test_label)
+error
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+#(3)
+#sift feature
+```{r}
+# index <- read.table("TEST-NUMBER.txt")
+# index <- as.vector(t(index))
+
+SIFT <- read.csv('../data/train/SIFT_train.csv',
+              header = FALSE)[,-1]
+# label=read.csv('C:/Users/ding/Desktop/train/train/label_train.csv')[,3]
+# label=data.frame(label)
+
+SIFT_train <- SIFT[-index,]
+SIFT_test <- SIFT[index,]
+train_label <- matrix(label[-index,])
+test_label <- matrix(label[index,])
+
+train <- cbind(SIFT_train,train_label)
+colnames(train)[2001] <- "label" 
+```
+
+#cross validation
+```{r}
+SIFT_fit <- cv.glmnet(as.matrix(SIFT_train), train_label,nfolds = 3,family = "multinomial")
+plot(SIFT_fit,main = "logistic-SIFT")
+```
+
+```{r}
+#best lambda is l
+l <- SIFT_fit$lambda.1se
+#model with best lamda cost time 
+time <- system.time(glmnet(as.matrix(SIFT_train), as.factor(train_label),lambda = l,
+                   family = "multinomial",type.multinomial = "grouped"))[3]
+time
+#error rate
+pred <- predict.cv.glmnet(SIFT_fit, as.matrix(SIFT_test),type = "class")
+pred <- data.frame(pred)
+
+error <- mean(pred != test_label)
+error
+```
+
+
+
+
+
+
+
+
+
+#(4)
+#hog feature
+```{r}
+# index <- read.table("TEST-NUMBER.txt")
+# index <- as.vector(t(index))
+
+load("../output/HOG.RData")
+HOG <- dat
+# label <- read.csv('C:/Users/ding/Desktop/train/train/label_train.csv')[,3]
+# label <- as.data.frame(label)
+
+HOG_train <- HOG[-index,]
+HOG_test <- HOG[index,]
+train_label <- matrix(label[-index,])
+test_label <- matrix(label[index,])
+```
+
+#cross validation
+```{r}
+HOG_fit <- cv.glmnet(as.matrix(HOG_train), train_label,nfolds = 3,family = "multinomial")
+plot(HOG_fit,main = "logistic-hog")
+```
+
+```{r}
+#best lambda is l
+l <- HOG_fit$lambda.1se
+#model with best lamda cost time 
+time <- system.time(glmnet(as.matrix(HOG_train), as.factor(train_label),lambda = l,
+                   family = "multinomial",type.multinomial = "grouped"))[3]
+time
+#error rate
+pred <- predict.cv.glmnet(HOG_fit, as.matrix(HOG_test),type = "class")
+pred <- data.frame(pred)
+
+error <- mean(pred != test_label)
+error
+```

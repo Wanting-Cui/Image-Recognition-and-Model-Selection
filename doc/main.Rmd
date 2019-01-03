@@ -1,0 +1,155 @@
+---
+title: "Project 3 Group 1"
+author: "Wanting Cui"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r}
+if(!require("xgboost")){
+  install.packages("xgboost")
+}
+
+if(!require("ggplot2")){
+  install.packages("ggplot2")
+}
+
+if(!require("reshape2")){
+  install.packages("reshape2")
+}
+
+library(xgboost)
+library(ggplot2)
+library(reshape2)
+
+source("../lib/xgboost_cv.R")
+```
+
+### Step 0: specify directories.
+
+Provide directory for extracted features.
+```{r}
+feat.dir <- "../output/features2/"
+```
+
+### Step 1: set up controls for evaluation experiments.
+
+In this chunk, ,we have a set of controls for the evaluation experiments. 
+
++ (T/F) cross-validation on the training set
++ (number) K, the number of CV folds
++ (T/F) run evaluation on an independent test set
+
+
+```{r exp_setup}
+run.cv=TRUE # run cross-validation on the training set
+K <- 5  # number of CV folds
+run.test=TRUE # run evaluation on an independent test set
+```
+
+
+### Step 2: import training features and labels.
+
+```{r train_label}
+sift2 <- read.csv(paste0(feat.dir, "SIFT_train.csv"), header = FALSE)[, -1]
+load(paste0(feat.dir, "HOG.RData"))
+hog2 <- dat
+lbp2 <- read.csv(paste0(feat.dir, "lbp.csv"), header = FALSE)
+train2 <- cbind(sift2, hog2, lbp2)
+train2 <- data.matrix(train2)
+
+lab_tr <- read.csv(paste0(feat.dir, "label_train.csv"))[,3]
+lab_tr <- data.matrix(lab_tr)
+```
+
+
+### Step 3: Train a classification model with training images
+
+#### Model selection with cross-validation
+* Do model selection by choosing among different values of training model parameters. Max.depth (depth of each tree), eta (shrinkage), nrounds. 
+```{r runcv, message=FALSE, warning=FALSE}
+
+if(run.cv){
+  shl_tr <- xgboost_cv(train = train2, lab = lab_tr, nrou = 300, 
+                      list_max.depth = c(3, 5, 10, 20), 
+                      list_eta = c(0.03, 0.3, 0.5, 0.8),
+                      name = "SIFT + HOG + lbp", fold = K)
+  err.cv1 <- shl_tr[[1]]
+  save(err.cv1, file = "../output/XGBOOST_results/err_shl.RData")
+  
+  
+  shl_tr2 <- xgboost_cv(train = train2, lab = lab_tr, nrou = 200, 
+                      list_max.depth = c(2, 3, 4), 
+                      list_eta = c(0.4, 0.5),
+                      name = "SIFT + HOG + lbp 2", fold = K)
+  err.cv2 <- shl_tr2[[1]]
+  save(err.cv2, file = "../output/XGBOOST_results/err_shl2.RData")
+  
+}
+```
+
+Visualize cross-validation results. 
+
+```{r cv_vis}
+if(run.cv){
+   print(shl_tr[[2]])
+  
+  jpeg("../output/XGBOOST_results/XGBOOST & SIFT + HOG + lbp0.jpeg")
+  plot(shl_tr[[2]])
+  dev.off
+  
+  print(shl_tr2[[2]])
+  
+  jpeg("../output/XGBOOST_results/XGBOOST & SIFT + HOG + lbp2.jpeg")
+  plot(shl_tr2[[2]])
+  dev.off
+  
+}
+
+```
+
+
+* Train the model with the entire training set using the selected model (model parameter) via cross-validation.
+```{r final_train}
+tm_train=NA
+param <- list("objective" = "multi:softmax",
+                    "num_class" = 4,
+                    "eta" = 0.5, "max.depth" = 4)
+tm_train <- system.time(bst <- xgboost(data = train2, label = lab_tr, params = param, nrounds = 80, verbose = 0))
+save(bst, file="../output/XGBOOST_results/bst.RData")
+```
+
+### Step 5: Make prediction 
+Feed the final training model with the completely holdout testing data. 
+```{r test}
+tm_test=NA
+if(run.test){
+  sift1 <- read.csv(paste0(feat.dir, "SIFT_test.csv"), header = FALSE)[, -1]
+  load(paste0(feat.dir, "HOG_test.RData"))
+  lbp1 <- read.csv(paste0(feat.dir, "lbp_test.csv"), header = FALSE)
+  test <- cbind(sift1, dat, lbp1)
+  test <- data.matrix(test)
+  
+  lab_te <- read.csv(paste0(feat.dir, "labels1.csv"))
+  base <- read.csv(paste0(feat.dir, "baselinetest.csv"))
+  
+  tm_test <- system.time(pred <- predict(bst, test))
+  lab_te[,3] <- pred
+  lab_te[,2] <- base[,2]
+  save(lab_te, file="../output/XGBOOST_results/labels.RData")
+  write.csv(lab_te, file = paste0(feat.dir, "labels.csv"), row.names = FALSE)
+  
+  # lab_te <- read.csv(paste0(feat.dir, "label_test1.csv"))
+  # mean(pred != lab_te)
+  
+}
+```
+
+### Summarize Running Time
+Prediction performance matters, so does the running times for constructing features and for training the model, especially when the computation resource is limited. 
+```{r running_time}
+cat("Time for training model=", tm_train[3], "s \n")
+cat("Time for making prediction=", tm_test[3], "s \n")
+```

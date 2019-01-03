@@ -1,0 +1,7 @@
+RBF SVM Best Parameters
+
+Features   Cost   Gamma
+SIFT        7       50
+GIST        1        5
+HOG	    8       50
+LBP	    8	    50

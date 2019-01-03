@@ -1,0 +1,90 @@
+---
+title: "RandomForest"
+author: "Hanying Ji"
+date: "2018/3/19"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Cross Validation Function for Random Forest
+```{r}
+CVforRF<-function(feature_file,way="readcsv",header_TF=FALSE){
+  setwd("/Users/JHY/Documents/2018SpringCourse/Applied Data Science/Spring2018-Project3-Group1")
+  test_index<-read.table("./data/train/TEST-NUMBER.txt")
+  test_index<-as.vector(t(test_index))
+  if(way=="readcsv"){
+    feature<-read.csv(feature_file,header = header_TF)
+    print(1)
+  }
+  if(way=="load"){
+    load(feature_file)
+    feature<-dat
+  }
+  if(feature_file==".output/features/SIFT_train.csv"){
+    feature<-feature[,2:ncol(feature)]
+  }
+  label<-read.csv("./data/train/label_train.csv")
+  train_data<-feature[-test_index,]
+  train_label<-label[-test_index,]$label
+  test_data<-feature[test_index,]
+  test_label<-label[test_index,]$label
+
+  if(!require("randomForest")){
+    install.packages("randomForest")
+  }
+  if(!require("caret")){
+    install.packages("caret")
+  }
+  if(!require("e1071")){
+    install.packages("e1071")
+  }
+  if(!require("ggplot2")){ 
+    install.packages("ggplot2")
+  }
+  library(randomForest)
+  library(caret)
+  library(e1071)
+  library(knitr)
+  library(ggplot2)
+  K<-5
+  set.seed(24)
+  cv_index <- sample(1:K,2700,replace=TRUE,prob=rep(1/K,K))
+  cv_error<-c()
+  tune_mtry<-c()
+  for(k in 1:K){
+    train.data <- train_data[cv_index != k,]
+    train.label <- train_label[cv_index != k]
+    validation.data <- train_data[cv_index == k,]
+    validation.label <- train_label[cv_index == k]
+    rf_model <- tuneRF(train.data, as.factor(train.label), ntreeTry = 600, stepFactor=1.5, improve=1e-5,doBest=TRUE)
+    tune_mtry[k]<-rf_model$mtry
+    model_pred<-predict(rf_model,validation.data,type = "class")
+    cv_error[k]<-mean(model_pred!=validation.label)
+  }
+  best_mtry<-tune_mtry[which.min(cv_error)]
+  print(best_mtry)
+  train_time<-system.time(rf_model_best<-randomForest(train_data,as.factor(train_label),mtry=best_mtry,ntree=600))
+  print(train_time)
+  train_error <- mean(rf_model_best$predicted != train_label)
+  print(train_error)
+  test_time<-system.time(pred <- predict(rf_model_best,newdata=test_data,type="class"))
+  test_error<-mean(pred != test_label)
+  print(test_error)
+}
+```
+
+
+
+#SIFT
+```{r}
+CVforRF("./output/features/SIFT_train.csv")
+```
+
+
+#GIST
+```{r}
+CVforRF("./output/features/gist/gist10.csv",header=TRUE)
+```
